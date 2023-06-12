@@ -61,8 +61,14 @@ interface SwitchProps extends PrimitiveButtonProps {
 const Switch = defineComponent({
   name: SWITCH_NAME,
   inheritAttrs: false,
+  props: {
+    ratio: {
+      type: Number,
+      default: 1 / 1,
+    },
+  },
   setup(props, { attrs, slots, expose }) {
-    const { __scopeAvatar, ...avatarProps } = attrs as ScopedProps<AvatarProps>
+    const { __scopeAvatar, ...avatarProps } = attrs as ScopedProps<SwitchProps>
     const innerRef = ref()
     const imageLoadingStatus = ref<ImageLoadingStatus>('idle')
 
@@ -75,7 +81,7 @@ const Switch = defineComponent({
     })
 
     expose({
-      inferRef: computed(() => innerRef.value?.$el),
+      SwitchProps: computed(() => innerRef.value?.$el),
     })
 
     const originalReturn = () => h(
