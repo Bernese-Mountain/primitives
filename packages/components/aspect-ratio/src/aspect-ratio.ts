@@ -1,10 +1,13 @@
-import type { ComponentPublicInstance, VNodeProps } from 'vue'
+import type { ComponentPublicInstance } from 'vue'
 import { computed, defineComponent, h, ref } from 'vue'
-import type { ComponentPropsWithoutRef, ElementRef } from '@oku-ui/primitive'
+import type { ElementType, MergeProps, PrimitiveProps, RefElement } from '@oku-ui/primitive'
 import { Primitive } from '@oku-ui/primitive'
 
-type PrimitiveAspectRatioProps = ComponentPropsWithoutRef<typeof Primitive.div>
-type AspectRatioElement = ElementRef<typeof Primitive.div>
+interface AspectRatioProps extends PrimitiveProps {
+  ratio?: number
+}
+
+type AspectRatioElement = ElementType<'div'>
 
 const NAME = 'AspectRatio'
 
@@ -18,7 +21,7 @@ const AspectRatio = defineComponent({
     },
   },
   setup(props, { attrs, slots, expose }) {
-    const { style, ...aspectRatioProps } = attrs as PrimitiveAspectRatioProps
+    const { style, ...aspectRatioProps } = attrs as AspectRatioElement
     const innerRef = ref<ComponentPublicInstance>()
 
     expose({
@@ -49,7 +52,9 @@ const AspectRatio = defineComponent({
               left: 0,
             },
           },
-          () => slots.default?.(),
+          {
+            default: () => slots.default?.(),
+          },
         ),
       ],
     )
@@ -60,17 +65,11 @@ const AspectRatio = defineComponent({
   },
 })
 
-export type ComponentProps<T> =
-  T extends new () => { $props: infer P } ? NonNullable<P> :
-    T extends (props: infer P, ...args: any) => any ? P :
-        {}
+// TODO: https://github.com/vuejs/core/pull/7444 after delete
+type _AspectRatioProps = MergeProps<AspectRatioProps, AspectRatioElement>
+type AspectRatioRef = RefElement<typeof AspectRatio>
 
-type Merge<T, U> = Omit<ComponentProps<T>, keyof VNodeProps | 'class' | 'style'> & U
-
-type AspectRatioProps = Merge<typeof AspectRatio, PrimitiveAspectRatioProps>
-const OkuAspectRatio = AspectRatio as typeof AspectRatio & (new () => { $props: AspectRatioProps })
-
-type OkuAspectRatioElement = Omit<InstanceType<typeof AspectRatio>, keyof ComponentPublicInstance>
+const OkuAspectRatio = AspectRatio as typeof AspectRatio & (new () => { $props: _AspectRatioProps })
 
 export { OkuAspectRatio }
-export type { AspectRatioProps, OkuAspectRatioElement }
+export type { AspectRatioProps, AspectRatioElement, AspectRatioRef }

@@ -1,45 +1,88 @@
-/* eslint-disable vue/one-component-per-file */
-import type { ComponentPublicInstance } from 'vue'
-import { computed, defineComponent, h, onMounted, onUnmounted, ref, watch, watchEffect } from 'vue'
+import type { ComponentPublicInstance, PropType, Ref } from 'vue'
+import { useRef, computed, defineComponent, h, onMounted, onUnmounted, ref, toRefs, watch, watchEffect } from 'vue'
 import type { ComponentPropsWithoutRef } from '@oku-ui/primitive'
 import { Primitive } from '@oku-ui/primitive'
 import type { Scope } from '@oku-ui/provide'
 import { createProvideScope } from '@oku-ui/provide'
 import { useCallbackRef } from '@oku-ui/use-callback-ref'
+import { composeEventHandlers } from '@oku-ui/utils'
+import type { ElementType, MergeProps, PrimitiveProps, RefElement } from '@oku-ui/primitive'
+import { useControllableRef, usePrevious, useRef, useSize } from '@oku-ui/use-composable'
 
-function useImageLoadingStatus(src?: string) {
-  const loadingStatus = ref<ImageLoadingStatus>('idle')
-
-  onMounted(() => {
-    if (!src) {
-      loadingStatus.value = 'error'
-      return
-    }
-
-    let isMounted = true
-    const image = new window.Image()
-
-    const updateStatus = (status: ImageLoadingStatus) => () => {
-      if (!isMounted)
-        return
-      loadingStatus.value = status
-    }
-
-    loadingStatus.value = 'loading'
-    image.onload = updateStatus('loaded')
-    image.onerror = updateStatus('error')
-    image.src = src
-
-    onUnmounted(() => {
-      isMounted = false
-    })
+function defaultOnCheckedChange(checked: boolean) {
+  return new Event('checkedchange', {
+    //
   })
-
-  return loadingStatus
 }
-
+function getState(checked: boolean) {
+  return checked ? 'checked' : 'unchecked'
+}
 /* -------------------------------------------------------------------------------------------------
- * Avatar
+ * BubbleInput
+ * ----------------------------------------------------------------------------------------------- */
+type BubbleInputElement = ElementType<'input'>
+
+const BubbleInput = defineComponent({
+  name: 'BubbleInput',
+  inheritAttrs: false,
+  props: {
+    checked: {
+      type: Boolean,
+      default: false,
+    },
+    control: {
+      type: Object as PropType<HTMLElement | null>,
+      default: null,
+    },
+    bubbles: {
+      type: Boolean,
+      default: true,
+    },
+  },
+  setup(props, { attrs }) {
+    const { ...inputAttrs } = attrs as BubbleInputElement
+    const { checked, control, bubbles } = props
+    const _ref = ref<HTMLInputElement>()
+    const prevChecked = usePrevious(checked)
+    const controlSize = useSize(control)
+
+    onMounted(() => {
+      watchEffect(() => {
+        let input = _ref.value!
+        const inputProto = window.HTMLInputElement.prototype
+        const descriptor = Object.getOwnPropertyDescriptor(inputProto, 'checked') as PropertyDescriptor
+        const setChecked = descriptor.set
+
+        if (prevChecked !== checked && setChecked) {
+          const event = new Event('click', { bubbles })
+          input = getState(checked)
+          setChecked.call(input, getState(checked) ? false : checked)
+          input.dispatchEvent(event)
+        }
+      })
+    })
+
+    return () =>
+      h('input', {
+        'type': 'checkbox',
+        'aria-hidden': true,
+        'defaultChecked': getState(checked) ? false : checked,
+        ...inputAttrs,
+        'tabIndex': -1,
+        'ref': _ref,
+        'style': {
+          ...inputAttrs.style as any,
+          ...controlSize,
+          position: 'absolute',
+          pointerEvents: 'none',
+          opacity: 0,
+          margin: 0,
+        },
+      })
+  },
+})
+/* -------------------------------------------------------------------------------------------------
+ * Switch
  * ----------------------------------------------------------------------------------------------- */
 
 const SWITCH_NAME = 'Switch'
@@ -62,180 +105,116 @@ const Switch = defineComponent({
   name: SWITCH_NAME,
   inheritAttrs: false,
   props: {
-    ratio: {
-      type: Number,
-      default: 1 / 1,
+    name: {
+      type: String,
+      default: '',
+    },
+    checked: {
+      type: Boolean,
+      default: false,
+    },
+    defaultChecked: {
+      type: Boolean,
+      default: false,
+    },
+    required: {
+      type: Boolean,
+      default: false,
+    },
+    disabled: {
+      type: Boolean,
+      default: false,
+    },
+    value: {
+      type: String,
+      default: 'on',
+    },
+    onCheckedChange: {
+      type: Function as PropType<(checked: boolean) => Event>,
+      default: defaultOnCheckedChange,
     },
   },
   setup(props, { attrs, slots, expose }) {
-    const { __scopeAvatar, ...avatarProps } = attrs as ScopedProps<SwitchProps>
-    const innerRef = ref()
-    const imageLoadingStatus = ref<ImageLoadingStatus>('idle')
+    const { name, checked, defaultChecked, required, disabled, value, onCheckedChange } = toRefs(props)
+    const { __scopeSwitch, ...switchProps } = attrs as ScopedProps<SwitchProps>
+    const { _ref: buttonRef, refEl: buttonRefEl } = useRef<HTMLButtonElement>()
+
+    const innerRef = ref<ComponentPublicInstance>()
 
     SwitchProvider({
-      scope: __scopeAvatar,
-      imageLoadingStatus: imageLoadingStatus.value,
-      onImageLoadingStatusChange: (status: ImageLoadingStatus) => {
-        imageLoadingStatus.value = status
-      },
+      //
     })
 
     expose({
       SwitchProps: computed(() => innerRef.value?.$el),
+      innerRef: buttonRefEl,
     })
-
-    const originalReturn = () => h(
-      Primitive.span, {
-        ...avatarProps,
-        ref: innerRef,
+    const isFormControl = buttonRefEl.value ? Boolean(buttonRefEl.value.closest('form')) : true
+    const hasConsumerStoppedPropagationRef = ref(false)
+    const originalReturn = () =>
+      [h(Primitive.button, {
+        'type': 'button',
+        'role': 'switch',
+        'aria-checked': checked.value as any,
+        'aria-required': required.value,
+        'data-state': getState(checked.value as any),
+        'data-disabled': disabled.value ? '' : undefined,
+        'disabled': disabled,
+        'value': value,
+        ...switchProps,
+        'ref': innerRef,
+        'onKeyDown': composeEventHandlers(switchProps.onKeydown, (event: any) => {
+          // According to WAI ARIA, Checkboxes don't activate on enter keypress
+          if (event.key === 'Enter')
+            event.preventDefault()
+        }),
+        'onClick': composeEventHandlers(switchProps.onClick, (event: any) => {
+          checked.value = getState(checked.value as any) ? true : !(checked.value as any)
+          if (isFormControl) {
+            // hasConsumerStoppedPropagationRef.value.current = event.isPropagationStopped()
+            // if checkbox is in a form, stop propagation from the button so that we only propagate
+            // one click event (from the input). We propagate changes from an input so that native
+            // form validation works and form events reflect checkbox updates.
+            if (!hasConsumerStoppedPropagationRef.value)
+              event.stopPropagation()
+          }
+        }),
       },
-      slots.default && slots.default(),
-    )
-    return originalReturn as unknown as {
-      innerRef: AvatarElement
-    }
-  },
-})
-
-/* -------------------------------------------------------------------------------------------------
- * AvatarImage
- * ----------------------------------------------------------------------------------------------- */
-
-const IMAGE_NAME = 'AvatarImage'
-
-type AvatarImageElement = ComponentPropsWithoutRef<typeof Primitive.img>
-type PrimitiveImgProps = ComponentPropsWithoutRef<typeof Primitive.img>
-interface AvatarImageProps extends PrimitiveImgProps {
-  onLoadingStatusChange?: (status: ImageLoadingStatus) => void
-}
-
-const AvatarImage = defineComponent({
-  name: IMAGE_NAME,
-  inheritAttrs: false,
-  setup(props, { attrs, slots, expose }) {
-    const { __scopeAvatar, src, onLoadingStatusChange = () => {}, ...imageProps } = attrs as ScopedProps<AvatarImageProps>
-    const inject = useAvatarInject(IMAGE_NAME, __scopeAvatar)
-    const innerRef = ref<ComponentPublicInstance>()
-    const imageLoadingStatus = useImageLoadingStatus(src)
-
-    const handleLoadingStatusChange = useCallbackRef((status: ImageLoadingStatus) => {
-      onLoadingStatusChange(status)
-      inject.value.onImageLoadingStatusChange(status)
-    })
-
-    onMounted(() => {
-      if (imageLoadingStatus.value !== 'idle')
-        handleLoadingStatusChange(imageLoadingStatus.value)
-    })
-
-    watch(imageLoadingStatus, (newValue) => {
-      if (newValue !== 'idle')
-        handleLoadingStatusChange(newValue)
-    })
-
-    expose({
-      innerRef: computed(() => innerRef.value?.$el),
-    })
-
-    const originalReturn = () => imageLoadingStatus.value === 'loaded'
-      ? h(
-        Primitive.img, {
-          ...imageProps,
-          src,
-          ref: innerRef,
+      {
+        default: () => slots.default?.(),
+      }),
+      isFormControl && h(
+        BubbleInput,
+        {
+          control: buttonRefEl.value,
+          bubbles: !hasConsumerStoppedPropagationRef.value,
+          name,
+          value,
+          checked: checked.value,
+          required,
+          disabled,
+          // We transform because the input is absolutely positioned but we have
+          // rendered it **after** the button. This pulls it back to sit on top
+          // of the button.
+          style: { transform: 'translateX(-100%)' },
         },
-        slots.default && slots.default(),
-      )
-      : null
-
+      ),
+      ]
     return originalReturn as unknown as {
-      innerRef: AvatarImageElement
-    }
-  },
-})
-
-/* -------------------------------------------------------------------------------------------------
- * AvatarFallback
- * ----------------------------------------------------------------------------------------------- */
-
-const FALLBACK_NAME = 'AvatarFallback'
-
-type PrimitiveAvatarFallbackProps = ComponentPropsWithoutRef<typeof Primitive.span>
-type PrimitiveSpanElement = ComponentPropsWithoutRef<typeof Primitive.span>
-interface AvatarFallbackProps extends PrimitiveAvatarFallbackProps, PrimitiveSpanProps {
-  delayms?: number
-}
-const AvatarFallback = defineComponent({
-  name: FALLBACK_NAME,
-  inheritAttrs: false,
-  setup(props, { attrs, expose, slots }) {
-    const { __scopeAvatar, delayms, ...fallbackProps } = attrs as ScopedProps<AvatarFallbackProps>
-    const provide = useAvatarInject(FALLBACK_NAME, __scopeAvatar)
-    const canRender = ref(delayms === undefined)
-    const innerRef = ref<ComponentPublicInstance>()
-
-    onMounted(() => {
-      if (delayms === undefined)
-        canRender.value = true
-      else
-        canRender.value = false
-    })
-
-    onMounted(() => {
-      watchEffect(() => {
-        if (delayms !== undefined) {
-          const timerID = window.setTimeout(() => {
-            canRender.value = true
-          }, delayms)
-          return () => window.clearTimeout(timerID)
-        }
-      })
-    })
-
-    expose({
-      innerRef: computed(() => innerRef.value?.$el),
-    })
-
-    const originalReturn = () => {
-      return (canRender.value && (provide.value.imageLoadingStatus !== 'loaded'))
-        ? h(
-          Primitive.span, {
-            ...fallbackProps,
-            ref: innerRef,
-          },
-          slots.default && slots.default(),
-        )
-        : canRender.value
-    }
-
-    return originalReturn as unknown as {
-      innerRef: PrimitiveSpanElement
+      innerRef: Ref<SwitchElement>
     }
   },
 })
 
 /* ----------------------------------------------------------------------------------------------- */
 
-const OkuAvatar = Avatar as typeof Avatar & (new () => { $props: ScopedProps<AvatarProps> })
-const OkuAvatarImage = AvatarImage as typeof AvatarImage & (new () => { $props: ScopedProps<AvatarImageProps> })
-const OkuAvatarFallback = AvatarFallback as typeof AvatarFallback & (new () => { $props: ScopedProps<AvatarFallbackProps> })
+type _OkuCheckboxProps = MergeProps<SwitchProps, SwitchElement>
 
-type OkuAvatarElement = Omit<InstanceType<typeof Avatar>, keyof ComponentPublicInstance>
-type OkuAvatarImageElement = Omit<InstanceType<typeof AvatarImage>, keyof ComponentPublicInstance>
-type OkuAvatarFallbackElement = Omit<InstanceType<typeof AvatarFallback>, keyof ComponentPublicInstance>
 
 export {
-  OkuAvatar,
-  OkuAvatarImage,
-  OkuAvatarFallback,
-  createAvatarScope,
+ 
 }
 
 export type {
-  AvatarProps,
-  AvatarImageProps,
-  AvatarFallbackProps,
-  OkuAvatarElement,
-  OkuAvatarImageElement,
-  OkuAvatarFallbackElement,
+  
 }

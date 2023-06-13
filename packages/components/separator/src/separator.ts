@@ -1,37 +1,54 @@
-import type { ComponentPublicInstance } from 'vue'
+import type { ComponentPublicInstance, PropType } from 'vue'
 import { computed, defineComponent, h, ref } from 'vue'
-import type { ComponentPropsWithoutRef, ElementRef } from '@oku-ui/primitive'
+import type { ElementType, MergeProps, PrimitiveProps, RefElement } from '@oku-ui/primitive'
 import { Primitive } from '@oku-ui/primitive'
-
-type PrimitiveSeparatorProps = ComponentPropsWithoutRef<typeof Primitive.div>
 
 const NAME = 'Separator'
 const DEFAULT_ORIENTATION = 'horizontal'
 const ORIENTATIONS = ['horizontal', 'vertical'] as const
 
 type Orientation = typeof ORIENTATIONS[number]
-type SeparatorElement = ElementRef<typeof Primitive.div>
-interface SeparatorProps extends PrimitiveSeparatorProps {
+type SeparatorElement = ElementType<'div'>
+
+interface SeparatorProps extends PrimitiveProps {
+  /**
+  * Whether or not the component is purely decorative. When true, accessibility-related attributes
+  * are updated so that that the rendered element is removed from the accessibility tree.
+  */
+  decorative?: boolean
   /**
    * Either `vertical` or `horizontal`. Defaults to `horizontal`.
    */
   orientation?: Orientation
-  /**
-   * Whether or not the component is purely decorative. When true, accessibility-related attributes
-   * are updated so that that the rendered element is removed from the accessibility tree.
-   */
-  decorative?: boolean
 }
 
 const Separator = defineComponent({
   name: NAME,
   inheritAttrs: false,
+  props: {
+    /**
+    * Whether or not the component is purely decorative. When true, accessibility-related attributes
+    * are updated so that that the rendered element is removed from the accessibility tree.
+    */
+    decorative: {
+      type: Boolean,
+      default: false,
+    },
+    /**
+     * Either `vertical` or `horizontal`. Defaults to `horizontal`.
+     */
+    orientation: {
+      type: String as PropType<Orientation>,
+      default: DEFAULT_ORIENTATION,
+    },
+  },
   setup(props, { attrs, slots, expose }) {
-    const { decorative, orientation: orientationProp = DEFAULT_ORIENTATION, ...domProps } = attrs as SeparatorProps
-    const orientation = ORIENTATIONS.includes(orientationProp) ? orientationProp : DEFAULT_ORIENTATION
+    const { ...domProps } = attrs as SeparatorElement
+    const orientation = ORIENTATIONS.includes(props.orientation) ? props.orientation : DEFAULT_ORIENTATION
     // `aria-orientation` defaults to `horizontal` so we only need it if `orientation` is vertical
     const ariaOrientation = orientation === 'vertical' ? orientation : undefined
-    const semanticProps = decorative ? { role: 'none' } : { 'aria-orientation': ariaOrientation, 'role': 'separator' }
+    const semanticProps = props.decorative ? { role: 'none' } : { 'aria-orientation': ariaOrientation, 'role': 'separator' }
+    const dataOrientation = { 'data-orientation': orientation }
 
     const innerRef = ref<ComponentPublicInstance>()
 
@@ -46,13 +63,15 @@ const Separator = defineComponent({
           ...attrs,
           ref: innerRef,
           ...semanticProps,
-          dataOrientation: orientation,
+          ...dataOrientation,
           style: {
             ...domProps,
             border: 'none',
           },
         },
-        slots.default?.(),
+        {
+          default: () => slots.default?.(),
+        },
       )
 
     return originalReturn as unknown as {
@@ -61,9 +80,15 @@ const Separator = defineComponent({
   },
 })
 
-const OkuSeparator = Separator as typeof Separator & (new () => { $props: SeparatorProps })
+// TODO: https://github.com/vuejs/core/pull/7444 after delete
+type _SeparatorProps = MergeProps<SeparatorProps, PrimitiveProps>
+type SeparatorRef = RefElement<typeof Separator>
 
-type OkuSeparatorElement = Omit<InstanceType<typeof OkuSeparator>, keyof ComponentPublicInstance>
+const OkuSeparator = Separator as typeof Separator & (new () => { $props: _SeparatorProps })
 
 export { OkuSeparator }
-export type { SeparatorProps, OkuSeparatorElement }
+export type {
+  SeparatorProps,
+  SeparatorElement,
+  SeparatorRef,
+}

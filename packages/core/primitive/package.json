@@ -1,14 +1,15 @@
 {
   "name": "@oku-ui/primitive",
   "type": "module",
-  "version": "0.0.0",
+  "version": "0.0.1",
   "license": "MIT",
   "source": "src/index.ts",
   "funding": "https://github.com/sponsors/productdevbook",
   "homepage": "https://oku-ui.com/primitives",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/oku-ui/primitives.git"
+    "url": "git+https://github.com/oku-ui/primitives.git",
+    "directory": "packages/core/primitive"
   },
   "bugs": {
     "url": "https://github.com/oku-ui/primitives/issues"
@@ -16,26 +17,27 @@
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
+      "require": "./dist/index.cjs",
       "import": "./dist/index.mjs"
     }
   },
-  "module": "dist/index.mjs",
-  "types": "dist/index.d.ts",
+  "require": "./dist/index.cjs",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.ts",
   "files": [
-    "dist",
-    "README.md"
+    "dist"
   ],
   "scripts": {
-    "clean": "rm -rf dist",
-    "build": "unbuild",
-    "dev": "unbuild --stub",
-    "lint": "eslint .",
-    "lint:fix": "eslint . --fix"
+    "build": "tsup",
+    "dev": "tsup --watch"
   },
   "peerDependencies": {
-    "vue": "^3.2.47"
+    "vue": "^3.3.2"
   },
   "devDependencies": {
     "tsconfig": "workspace:^"
+  },
+  "publishConfig": {
+    "access": "public"
   }
 }

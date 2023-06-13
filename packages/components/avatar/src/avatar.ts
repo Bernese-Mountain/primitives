@@ -1,11 +1,10 @@
-/* eslint-disable vue/one-component-per-file */
-import type { ComponentPublicInstance } from 'vue'
+import type { ComponentPublicInstance, PropType } from 'vue'
 import { computed, defineComponent, h, onMounted, onUnmounted, ref, watch, watchEffect } from 'vue'
-import type { ComponentPropsWithoutRef } from '@oku-ui/primitive'
+import type { ElementType, MergeProps, PrimitiveProps, RefElement } from '@oku-ui/primitive'
 import { Primitive } from '@oku-ui/primitive'
 import type { Scope } from '@oku-ui/provide'
 import { createProvideScope } from '@oku-ui/provide'
-import { useCallbackRef } from '@oku-ui/use-callback-ref'
+import { useCallbackRef } from '@oku-ui/use-composable'
 
 function useImageLoadingStatus(src?: string) {
   const loadingStatus = ref<ImageLoadingStatus>('idle')
@@ -43,7 +42,6 @@ function useImageLoadingStatus(src?: string) {
  * ----------------------------------------------------------------------------------------------- */
 
 const AVATAR_NAME = 'Avatar'
-type ScopedProps<P> = P & { __scopeAvatar?: Scope }
 const [createAvatarProvide, createAvatarScope] = createProvideScope(AVATAR_NAME)
 
 type ImageLoadingStatus = 'idle' | 'loading' | 'loaded' | 'error'
@@ -55,20 +53,28 @@ type AvatarProvideValue = {
 
 const [AvatarProvider, useAvatarInject] = createAvatarProvide<AvatarProvideValue>(AVATAR_NAME)
 
-type AvatarElement = ComponentPropsWithoutRef<typeof Primitive.span>
-type PrimitiveSpanProps = ComponentPropsWithoutRef<typeof Primitive.span>
-interface AvatarProps extends PrimitiveSpanProps {}
+type AvatarElement = ElementType<'span'>
+
+interface AvatarProps extends PrimitiveProps {
+  scopeAvatar?: Scope
+}
 
 const Avatar = defineComponent({
   name: AVATAR_NAME,
   inheritAttrs: false,
+  props: {
+    scopeAvatar: {
+      type: Object as unknown as PropType<Scope>,
+      required: false,
+    },
+  },
   setup(props, { attrs, slots, expose }) {
-    const { __scopeAvatar, ...avatarProps } = attrs as ScopedProps<AvatarProps>
+    const { ...avatarProps } = attrs as AvatarElement
     const innerRef = ref()
     const imageLoadingStatus = ref<ImageLoadingStatus>('idle')
 
     AvatarProvider({
-      scope: __scopeAvatar,
+      scope: props.scopeAvatar,
       imageLoadingStatus: imageLoadingStatus.value,
       onImageLoadingStatusChange: (status: ImageLoadingStatus) => {
         imageLoadingStatus.value = status
@@ -84,7 +90,9 @@ const Avatar = defineComponent({
         ...avatarProps,
         ref: innerRef,
       },
-      slots.default && slots.default(),
+      {
+        default: () => slots.default?.(),
+      },
     )
     return originalReturn as unknown as {
       innerRef: AvatarElement
@@ -98,23 +106,35 @@ const Avatar = defineComponent({
 
 const IMAGE_NAME = 'AvatarImage'
 
-type AvatarImageElement = ComponentPropsWithoutRef<typeof Primitive.img>
-type PrimitiveImgProps = ComponentPropsWithoutRef<typeof Primitive.img>
-interface AvatarImageProps extends PrimitiveImgProps {
+type AvatarImageElement = ElementType<'img'>
+
+interface AvatarImageProps extends PrimitiveProps {
   onLoadingStatusChange?: (status: ImageLoadingStatus) => void
+  scopeAvatar?: Scope
 }
 
 const AvatarImage = defineComponent({
   name: IMAGE_NAME,
   inheritAttrs: false,
+  props: {
+    onLoadingStatusChange: {
+      type: Function as unknown as PropType<(status: ImageLoadingStatus) => void>,
+      required: false,
+      default: () => {},
+    },
+    scopeAvatar: {
+      type: Object as unknown as PropType<Scope>,
+      required: false,
+    },
+  },
   setup(props, { attrs, slots, expose }) {
-    const { __scopeAvatar, src, onLoadingStatusChange = () => {}, ...imageProps } = attrs as ScopedProps<AvatarImageProps>
-    const inject = useAvatarInject(IMAGE_NAME, __scopeAvatar)
+    const { src, ...imageProps } = attrs as AvatarImageElement
+    const inject = useAvatarInject(IMAGE_NAME, props.scopeAvatar)
     const innerRef = ref<ComponentPublicInstance>()
     const imageLoadingStatus = useImageLoadingStatus(src)
 
     const handleLoadingStatusChange = useCallbackRef((status: ImageLoadingStatus) => {
-      onLoadingStatusChange(status)
+      props.onLoadingStatusChange(status)
       inject.value.onImageLoadingStatusChange(status)
     })
 
@@ -139,7 +159,9 @@ const AvatarImage = defineComponent({
           src,
           ref: innerRef,
         },
-        slots.default && slots.default(),
+        {
+          default: () => slots.default?.(),
+        },
       )
       : null
 
@@ -155,22 +177,33 @@ const AvatarImage = defineComponent({
 
 const FALLBACK_NAME = 'AvatarFallback'
 
-type PrimitiveAvatarFallbackProps = ComponentPropsWithoutRef<typeof Primitive.span>
-type PrimitiveSpanElement = ComponentPropsWithoutRef<typeof Primitive.span>
-interface AvatarFallbackProps extends PrimitiveAvatarFallbackProps, PrimitiveSpanProps {
-  delayms?: number
+type AvatarFallbackElement = ElementType<'span'>
+
+interface AvatarFallbackProps extends PrimitiveProps {
+  delayMs?: number
 }
+
 const AvatarFallback = defineComponent({
   name: FALLBACK_NAME,
   inheritAttrs: false,
+  props: {
+    delayMs: {
+      type: Number,
+      required: false,
+    },
+    scopeAvatar: {
+      type: Object as unknown as PropType<Scope>,
+      required: false,
+    },
+  },
   setup(props, { attrs, expose, slots }) {
-    const { __scopeAvatar, delayms, ...fallbackProps } = attrs as ScopedProps<AvatarFallbackProps>
-    const provide = useAvatarInject(FALLBACK_NAME, __scopeAvatar)
-    const canRender = ref(delayms === undefined)
+    const { ...fallbackProps } = attrs as AvatarFallbackProps
+    const provide = useAvatarInject(FALLBACK_NAME, props.scopeAvatar)
+    const canRender = ref(props.delayMs === undefined)
     const innerRef = ref<ComponentPublicInstance>()
 
     onMounted(() => {
-      if (delayms === undefined)
+      if (props.delayMs === undefined)
         canRender.value = true
       else
         canRender.value = false
@@ -178,10 +211,10 @@ const AvatarFallback = defineComponent({
 
     onMounted(() => {
       watchEffect(() => {
-        if (delayms !== undefined) {
+        if (props.delayMs !== undefined) {
           const timerID = window.setTimeout(() => {
             canRender.value = true
-          }, delayms)
+          }, props.delayMs)
           return () => window.clearTimeout(timerID)
         }
       })
@@ -198,26 +231,33 @@ const AvatarFallback = defineComponent({
             ...fallbackProps,
             ref: innerRef,
           },
-          slots.default && slots.default(),
+          {
+            default: () => slots.default?.(),
+          },
         )
         : canRender.value
     }
 
     return originalReturn as unknown as {
-      innerRef: PrimitiveSpanElement
+      innerRef: AvatarFallbackElement
     }
   },
 })
 
 /* ----------------------------------------------------------------------------------------------- */
 
-const OkuAvatar = Avatar as typeof Avatar & (new () => { $props: ScopedProps<AvatarProps> })
-const OkuAvatarImage = AvatarImage as typeof AvatarImage & (new () => { $props: ScopedProps<AvatarImageProps> })
-const OkuAvatarFallback = AvatarFallback as typeof AvatarFallback & (new () => { $props: ScopedProps<AvatarFallbackProps> })
+// TODO: https://github.com/vuejs/core/pull/7444 after delete
+type _OkuAvatarProps = MergeProps<AvatarProps, AvatarElement>
+type _OkuAvatarImageProps = MergeProps<AvatarImageProps, AvatarImageElement>
+type _OkuAvatarFallbackProps = MergeProps<AvatarFallbackProps, AvatarFallbackElement>
 
-type OkuAvatarElement = Omit<InstanceType<typeof Avatar>, keyof ComponentPublicInstance>
-type OkuAvatarImageElement = Omit<InstanceType<typeof AvatarImage>, keyof ComponentPublicInstance>
-type OkuAvatarFallbackElement = Omit<InstanceType<typeof AvatarFallback>, keyof ComponentPublicInstance>
+type AvatarRef = RefElement<typeof Avatar>
+type AvatarImageRef = RefElement<typeof AvatarImage>
+type AvatarFallbackRef = RefElement<typeof AvatarFallback>
+
+const OkuAvatar = Avatar as typeof Avatar & (new () => { $props: _OkuAvatarProps })
+const OkuAvatarImage = AvatarImage as typeof AvatarImage & (new () => { $props: _OkuAvatarImageProps })
+const OkuAvatarFallback = AvatarFallback as typeof AvatarFallback & (new () => { $props: _OkuAvatarFallbackProps })
 
 export {
   OkuAvatar,
@@ -230,7 +270,10 @@ export type {
   AvatarProps,
   AvatarImageProps,
   AvatarFallbackProps,
-  OkuAvatarElement,
-  OkuAvatarImageElement,
-  OkuAvatarFallbackElement,
+  AvatarElement,
+  AvatarImageElement,
+  AvatarFallbackElement,
+  AvatarRef,
+  AvatarImageRef,
+  AvatarFallbackRef,
 }
